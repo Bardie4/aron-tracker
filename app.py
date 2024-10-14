@@ -5,16 +5,7 @@ import plotly.express as px
 import plotly.graph_objs as go
 
 # Define the URL of the Google Sheets CSV export
-url = "https://docs.google.com/spreadsheets/d/1-NblbDmCxDEi5_BCSeVwzzMxZza1Mdbbv8HIPz8XXBI/export?format=csv"
-
-# Read the CSV file directly from the URL into a pandas DataFrame
-df = pd.read_csv(url)
-
-# Ensure that 'Flaske' is numeric
-df["Flaske"] = pd.to_numeric(df["Flaske"], errors="coerce")
-
-# Calculate the cumulative sum of 'Flaske' for each 'Dato'
-df["Cumulative_flaske"] = df.groupby("Dato")["Flaske"].cumsum()
+URL = "https://docs.google.com/spreadsheets/d/1-NblbDmCxDEi5_BCSeVwzzMxZza1Mdbbv8HIPz8XXBI/export?format=csv"
 
 
 # Define a custom sorting function for dates in the format DD.MM.YYYY
@@ -23,9 +14,6 @@ def sort_dates(dates):
         dates, key=lambda x: (x.split(".")[1], x.split(".")[0], x.split(".")[2])
     )
 
-
-# Get the unique dates for the dropdown options and sort them using the custom function
-unique_dates = sort_dates(df["Dato"].unique())
 
 # Initialize the Dash app
 app = dash.Dash(__name__)
@@ -37,13 +25,27 @@ app.layout = html.Div(
         html.H1("👶🏼 Aron 🍼-tracker"),
         dcc.Dropdown(
             id="date-dropdown",
-            options=[{"label": date, "value": date} for date in unique_dates],
-            value=unique_dates[-1],  # Set the default value to the last date
+            options=[],  # Options will be populated by the callback
+            value=None,  # Default value will be set by the callback
         ),
         html.Div(id="table-container"),
         html.Div(id="graph-container"),
     ]
 )
+
+
+# Callback to populate the dropdown options and set the default value
+@app.callback(
+    Output("date-dropdown", "options"),
+    Output("date-dropdown", "value"),
+    Input("date-dropdown", "value"),
+)
+def set_dropdown_options(selected_date):
+    df = pd.read_csv(URL)
+    unique_dates = sort_dates(df["Dato"].unique())
+    options = [{"label": date, "value": date} for date in unique_dates]
+    value = unique_dates[-1] if selected_date is None else selected_date
+    return options, value
 
 
 # Callback to update the table and graph based on the selected date
@@ -52,6 +54,14 @@ app.layout = html.Div(
     [Input("date-dropdown", "value")],
 )
 def update_output(selected_date):
+    df = pd.read_csv(URL)
+
+    # Ensure that 'Flaske' is numeric
+    df["Flaske"] = pd.to_numeric(df["Flaske"], errors="coerce")
+
+    # Calculate the cumulative sum of 'Flaske' for each 'Dato'
+    df["Cumulative_flaske"] = df.groupby("Dato")["Flaske"].cumsum()
+
     # Filter the DataFrame for the selected date
     filtered_df = df[
         df["Dato"] == selected_date
