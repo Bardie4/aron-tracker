@@ -4,83 +4,163 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objs as go
 from datetime import datetime
+from dataclasses import dataclass
 
-# Define the URL of the Google Sheets CSV export
+@dataclass
+class TotalStats:
+    _df: pd.DataFrame
+
+    @property
+    def total_per_day(self):
+        # format as dict of date: total
+        total = self._df.groupby("Dato")["Flaske"].sum().to_dict()
+        # Sort the dictionary by date
+        return dict(sorted(total.items(), key=lambda x: datetime.strptime(x[0], "%d.%m.%Y")))
+
+    @property
+    def total_today(self):
+        return self.total_per_day[list(self.total_per_day.keys())[-1]]
+
+    @property
+    def time_since_last_feed(self):
+        last_entry = self._df.iloc[-1]
+        last_entry_date = datetime.strptime(last_entry["Dato"], "%d.%m.%Y").date()
+        last_entry_time = datetime.strptime(last_entry["Tid"], "%H:%M").time()
+        current_date = datetime.now()
+        last_entry_datetime = datetime.combine(last_entry_date, last_entry_time)
+        time_difference = current_date - last_entry_datetime
+        total_seconds = time_difference.total_seconds()
+        hours = int(total_seconds // 3600)
+        minutes = int((total_seconds % 3600) // 60)
+        time_difference_formatted = f"{hours:02d}:{minutes:02d}"
+        return time_difference_formatted
+
+    def feeds_for_day(self, date):
+        # Format as dict of time: amount
+        feeds = self._df[self._df["Dato"] == date].set_index("Tid")["Flaske"].to_dict()
+        return feeds
+    
 URL = "https://docs.google.com/spreadsheets/d/1-NblbDmCxDEi5_BCSeVwzzMxZza1Mdbbv8HIPz8XXBI/export?format=csv"
+df = pd.DataFrame()
+total_stats = TotalStats(df)
 
 
-# Define a custom sorting function for dates in the format DD.MM.YYYY
 def sort_dates(dates):
-    # Convert string dates to datetime objects
     dates_as_datetime = [datetime.strptime(date, "%d.%m.%Y") for date in dates]
-    # Sort the datetime objects
     dates_as_datetime.sort()
-    # Convert back to strings
-    sorted_dates_as_strings = [
-        datetime.strftime(date, "%d.%m.%Y") for date in dates_as_datetime
-    ]
-    return sorted_dates_as_strings
+    return [datetime.strftime(date, "%d.%m.%Y") for date in dates_as_datetime]
 
-
-# Initialize the Dash app
 app = dash.Dash(__name__)
 server = app.server
 
-# Define the layout of the app
-app.layout = html.Div(
-    [
-        html.H1("👶🏼 Aron 🍼-tracker"),
-        dcc.Dropdown(
-            id="date-dropdown",
-            options=[],  # Options will be populated by the callback
-            value=None,  # Default value will be set by the callback
-        ),
-        html.Div(id="table-container"),
-        html.Div(id="graph-container"),
-        html.Div(id="bar-chart-container"),  # Container for the bar chart
-    ]
+def serve_layout():
+    # Fetch the data when layout is called
+    df = pd.read_csv(URL)
+    
+    # Generate the dropdown options
+    unique_dates = sort_dates(df["Dato"].unique())
+    dropdown_options = [{"label": date, "value": date} for date in unique_dates]
+    dropdown_value = unique_dates[-1] if unique_dates else None
+    
+    # Store the DataFrame in dcc.Store for access by the callback
+    return html.Div(
+        [
+            dcc.Store(id='data-store', data=df.to_dict('records')),
+            html.H1("👶🏼 Aron 🍼-tracker"),
+            html.H2("Statistikk"),
+            html.Div(id="stats-container"),
+            html.H2("Velg dato"),
+            dcc.Dropdown(
+                id="date-dropdown",
+                options=dropdown_options,
+                value=dropdown_value,
+            ),
+            html.Div(id="graph-container"),
+            html.H2("Mat per dag"),
+            html.Div(id="bar-chart-container"),
+        ]
+    )
+
+
+# Set the app.layout to the serve_layout function
+app.layout = serve_layout
+
+# === STATS ===
+@app.callback(
+    Output("stats-container", "children"),
+    [Input("date-dropdown", "value"),
+     Input("data-store", "data")]
 )
+def render_stats(selected_date, data):
+    df = pd.DataFrame(data)
+    total_stats = TotalStats(df)
+    return html.Div(
+        [
+            html.P(f"Totalt i dag: {total_stats.total_today}"),
+            html.P(f"Tid siden forrige måltid: {total_stats.time_since_last_feed}"),
+        ]
+    )
+
+# === BAR CHART ===
+@app.callback(
+    Output("bar-chart-container", "children"),
+    [Input("data-store", "data")]
+)
+def render_bar_chart(data):
+    df = pd.DataFrame(data)
+    total_stats = TotalStats(df)
+
+    # Create the bar chart from the total stats
+    bar_chart_fig = px.bar(
+        x=list(total_stats.total_per_day.keys()),
+        y=list(total_stats.total_per_day.values()),
+        title="Sum of Flaske per Day",
+        labels={"Flaske": "Sum of Flaske", "Dato": "Date"},
+    )
+
+    # Update the layout of the bar chart if necessary
+    bar_chart_fig.update_layout(
+        xaxis_title="Dato",
+        yaxis_title="Konsumert melk (ml)",
+        xaxis={"type": "category"},  # Treat 'Dato' as a categorical variable
+        yaxis={"type": "linear"},  # Ensure 'Flaske' is treated as a linear scale
+    )
+
+    return dcc.Graph(figure=bar_chart_fig)
 
 
-# Callback to populate the dropdown options and set the default value
+# === DATE DROPDOWN ===
 @app.callback(
     Output("date-dropdown", "options"),
     Output("date-dropdown", "value"),
-    Input("date-dropdown", "value"),
+    [Input("date-dropdown", "value"),
+     Input("data-store", "data")]
 )
-def set_dropdown_options(selected_date):
-    df = pd.read_csv(URL)
+def set_dropdown_options(selected_date, data):
+    df = pd.DataFrame(data)
     unique_dates = sort_dates(df["Dato"].unique())
     options = [{"label": date, "value": date} for date in unique_dates]
     value = unique_dates[-1] if selected_date is None else selected_date
     return options, value
 
-
-# Callback to update the table and graph based on the selected date
+# === GRAPH ===
 @app.callback(
-    [
-        Output("table-container", "children"),
-        Output("graph-container", "children"),
-        Output("bar-chart-container", "children"),
-    ],  # Output for the bar chart
-    [Input("date-dropdown", "value")],
+    Output("graph-container", "children"),
+    [Input("date-dropdown", "value"),
+     Input("data-store", "data")]
 )
-def update_output(selected_date):
-    df = pd.read_csv(URL)
+def render_graph(selected_date, data):
+    df = pd.DataFrame(data)
+    total_stats = TotalStats(df)
 
-    # Ensure that 'Flaske' is numeric
-    df["Flaske"] = pd.to_numeric(df["Flaske"], errors="coerce")
-    # Sort the DataFrame by 'Dato' using the custom sort_dates function
-    df["Dato"] = pd.to_datetime(df["Dato"], format="%d.%m.%Y")
-    # Calculate the cumulative sum of 'Flaske' for each 'Dato'
-    df["Cumulative_flaske"] = df.groupby("Dato")["Flaske"].cumsum()
-
-    # Filter the DataFrame for the selected date
     filtered_df = df[
         df["Dato"] == selected_date
-    ].copy()  # Create a copy to avoid SettingWithCopyWarning
+    ].copy()
 
-    # Convert 'Tid' to a datetime format assuming the format is HH:MM
+    filtered_df["Flaske"] = pd.to_numeric(filtered_df["Flaske"], errors="coerce")
+    filtered_df["Dato"] = pd.to_datetime(filtered_df["Dato"], format="%d.%m.%Y")
+    filtered_df["Cumulative_flaske"] = filtered_df.groupby("Dato")["Flaske"].cumsum()
+
     filtered_df["Tid"] = pd.to_datetime(filtered_df["Tid"], format="%H:%M")
 
     # Create the graph for the selected date
@@ -91,7 +171,8 @@ def update_output(selected_date):
         title=f"Kumulativ melk for {selected_date}",
         markers=True,
     )
-    # Add diamond markers where 'Avføring' is 'A'
+
+    # Bæsj
     avforing_df = filtered_df[filtered_df["Avføring"] == "A"]
     fig.add_trace(
         go.Scatter(
@@ -99,22 +180,23 @@ def update_output(selected_date):
             y=avforing_df["Cumulative_flaske"],
             mode="markers",
             marker=dict(symbol="diamond", size=16, color="orange"),
-            name="Avføring",
+            name="Bæsj",
         )
     )
-    # Add star markers where 'Urin' is 'U'
+
+    # Tiss
     urin_df = filtered_df[filtered_df["Urin"] == "U"]
     fig.add_trace(
         go.Scatter(
             x=urin_df["Tid"],
             y=urin_df["Cumulative_flaske"],
             mode="markers",
-            marker=dict(symbol="star", size=12, color="blue"),
-            name="Urin",
+            marker=dict(symbol="star", size=12, color="palegoldenrod"),
+            name="Tiss",
         )
     )
 
-    # Add a horizontal red line at y=600
+    # Mål
     fig.add_hline(
         y=600,
         line_color="red",
@@ -129,43 +211,7 @@ def update_output(selected_date):
         tickmode="auto",  # Use automatic tick mode for datetime data
     )
 
-    graph = dcc.Graph(figure=fig)
-
-    # Create the bar chart for the sum of 'Flaske' for each day
-    sum_flaske_per_day = df.groupby("Dato")["Flaske"].sum().reset_index()
-    sum_flaske_per_day.sort_values(by="Dato", inplace=True)
-    sum_flaske_per_day["Dato"] = sum_flaske_per_day["Dato"].dt.strftime("%d.%m.%Y")
-
-    # Create the bar chart for the sum of 'Flaske' for each day
-    bar_chart_fig = px.bar(
-        sum_flaske_per_day,
-        x="Dato",
-        y="Flaske",
-        title="Sum of Flaske per Day",
-        labels={"Flaske": "Sum of Flaske", "Dato": "Date"},
-    )
-
-    # Update the layout of the bar chart if necessary
-    bar_chart_fig.update_layout(
-        xaxis_title="Date",
-        yaxis_title="Sum of Flaske",
-        xaxis={"type": "category"},  # Treat 'Dato' as a categorical variable
-        yaxis={"type": "linear"},  # Ensure 'Flaske' is treated as a linear scale
-    )
-
-    bar_chart = dcc.Graph(figure=bar_chart_fig)
-
-    # Create the table for the selected date
-    filtered_df["Tid"] = filtered_df["Tid"].dt.strftime(
-        "%H:%M"
-    )  # Format 'Tid' as HH:MM
-    table = dash_table.DataTable(
-        columns=[{"name": i, "id": i} for i in filtered_df.columns],
-        data=filtered_df.to_dict("records"),
-        style_table={"overflowX": "auto"},
-    )
-
-    return table, graph, bar_chart
+    return dcc.Graph(figure=fig)
 
 
 # Run the app
