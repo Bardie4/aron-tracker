@@ -3,7 +3,8 @@ from dash import html, dcc, dash_table, Input, Output
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objs as go
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from dataclasses import dataclass
 
 @dataclass
@@ -26,8 +27,9 @@ class TotalStats:
         last_entry = self._df.iloc[-1]
         last_entry_date = datetime.strptime(last_entry["Dato"], "%d.%m.%Y").date()
         last_entry_time = datetime.strptime(last_entry["Tid"], "%H:%M").time()
-        current_date = datetime.now()
-        last_entry_datetime = datetime.combine(last_entry_date, last_entry_time)
+        norway_timezone = ZoneInfo("Europe/Oslo")
+        last_entry_datetime = datetime.combine(last_entry_date, last_entry_time, tzinfo=norway_timezone)
+        current_date = datetime.now(norway_timezone)
         time_difference = current_date - last_entry_datetime
         total_seconds = time_difference.total_seconds()
         hours = int(total_seconds // 3600)
@@ -226,7 +228,8 @@ def render_graph(selected_date, data):
             y=[0, total_stats.largest_meal],
             mode='lines',
             name='Daily Goal',
-            line=dict(color='green', width=2, dash='dash'),
+            opacity=0.25,
+            line=dict(color='gray', width=2, dash='dash'),
         )
     )
 
