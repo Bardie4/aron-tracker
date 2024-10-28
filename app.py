@@ -35,6 +35,17 @@ class TotalStats:
         time_difference_formatted = f"{hours:02d}:{minutes:02d}"
         return time_difference_formatted
 
+    @property
+    def n_feeds_today(self):
+        last_day = self._df.iloc[-1]["Dato"]
+        return len(self._df[self._df["Dato"] == last_day])
+
+    @property
+    def largest_meal(self):
+        daily_sum = self._df.groupby("Dato")["Flaske"].sum()
+        max_day = daily_sum.idxmax()
+        return daily_sum[max_day]
+
     def feeds_for_day(self, date):
         # Format as dict of time: amount
         feeds = self._df[self._df["Dato"] == date].set_index("Tid")["Flaske"].to_dict()
@@ -56,6 +67,7 @@ server = app.server
 def serve_layout():
     # Fetch the data when layout is called
     df = pd.read_csv(URL)
+    df.dropna(subset=["Tid", "Flaske"], inplace=True)
     
     # Generate the dropdown options
     unique_dates = sort_dates(df["Dato"].unique())
@@ -96,8 +108,10 @@ def render_stats(selected_date, data):
     total_stats = TotalStats(df)
     return html.Div(
         [
-            html.P(f"Totalt i dag: {total_stats.total_today}"),
+            html.P(f"Totalt i dag: {total_stats.total_today} ml"),
+            html.P(f"Antall måltider i dag: {total_stats.n_feeds_today}"),
             html.P(f"Tid siden forrige måltid: {total_stats.time_since_last_feed}"),
+            html.P(f"Største måltid: {total_stats.largest_meal} ml")
         ]
     )
 
@@ -198,11 +212,22 @@ def render_graph(selected_date, data):
 
     # Mål
     fig.add_hline(
-        y=600,
+        y=total_stats.largest_meal,
         line_color="red",
         line_width=3,
-        annotation_text="600 ml",
+        annotation_text="Største måltid",
         annotation_position="bottom right",
+    )
+
+    # Ideallinje
+    fig.add_trace(
+        go.Scatter(
+            x=["1900-01-01 00:00:00.0000", "1900-01-01 23:59:59.0000"],
+            y=[0, total_stats.largest_meal],
+            mode='lines',
+            name='Daily Goal',
+            line=dict(color='green', width=2, dash='dash'),
+        )
     )
 
     # Update layout for 'Tid' axis to treat as a datetime
