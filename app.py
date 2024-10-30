@@ -244,4 +244,4 @@ def render_graph(selected_date, data):
 
 # Run the app
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=False)

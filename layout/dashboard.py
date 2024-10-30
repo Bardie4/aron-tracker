@@ -17,6 +17,13 @@ dashboard = dbc.Row(
             ),
             dbc.Row(
                 [
+                    dbc.Col(MetricCard("Sist måltid", id="last-meal"), width=4),
+                    dbc.Col(MetricCard("Δ sist måltid", id="delta-last-meal"), width=4),
+                    dbc.Col(MetricCard("Tiss/Bæsj", id="pee-poo"), width=4),
+                ]
+            ),
+            dbc.Row(
+                [
                     dbc.Col(
                         FigureCard(
                             "Valgt dag",

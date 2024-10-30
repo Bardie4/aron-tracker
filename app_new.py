@@ -11,6 +11,7 @@ from sqlalchemy import create_engine
 from dataclasses import dataclass
 from layout.dashboard import dashboard
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 @dataclass
 class TotalStats:
@@ -28,14 +29,18 @@ class TotalStats:
         return self.total_per_day[list(self.total_per_day.keys())[-1]]
 
     @property
-    def time_since_last_feed(self):
+    def last_meal_time(self):
         last_entry = self._df.iloc[-1]
         last_entry_date = datetime.strptime(last_entry["Dato"], "%d.%m.%Y").date()
         last_entry_time = datetime.strptime(last_entry["Tid"], "%H:%M").time()
         norway_timezone = ZoneInfo("Europe/Oslo")
-        last_entry_datetime = datetime.combine(last_entry_date, last_entry_time, tzinfo=norway_timezone)
+        return datetime.combine(last_entry_date, last_entry_time, tzinfo=norway_timezone)
+
+    @property
+    def time_since_last_feed(self):
+        norway_timezone = ZoneInfo("Europe/Oslo") 
         current_date = datetime.now(norway_timezone)
-        time_difference = current_date - last_entry_datetime
+        time_difference = current_date - self.last_meal_time
         total_seconds = time_difference.total_seconds()
         hours = int(total_seconds // 3600)
         minutes = int((total_seconds % 3600) // 60)
@@ -43,9 +48,21 @@ class TotalStats:
         return time_difference_formatted
 
     @property
-    def n_feeds_today(self):
+    def df_last_day(self):
         last_day = self._df.iloc[-1]["Dato"]
-        return len(self._df[self._df["Dato"] == last_day])
+        return self._df[self._df["Dato"] == last_day]
+
+    @property
+    def n_feeds_today(self):
+        return len(self.df_last_day)
+
+    @property
+    def n_pee_today(self):
+        return len(self.df_last_day[self.df_last_day["Urin"] == "U"])
+
+    @property
+    def n_poo_today(self):
+        return len(self.df_last_day[self.df_last_day["Avføring"] == "A"])
 
     @property
     def largest_meal(self):
@@ -141,13 +158,36 @@ def meals_count(data):
 
 
 @app.callback(
+    Output({"type": "metric-value", "index": "last-meal"}, "children"),
+    Input("store", "data"),
+)
+def last_meal_time(data):
+    total_stats = TotalStats(pd.DataFrame(data))
+    return f"{total_stats.last_meal_time.hour}:{total_stats.last_meal_time.minute}"
+
+@app.callback(
+    Output({"type": "metric-value", "index": "delta-last-meal"}, "children"),
+    Input("store", "data"),
+)
+def delta_last_meal(data):
+    total_stats = TotalStats(pd.DataFrame(data))
+    return f"{total_stats.time_since_last_feed}"
+
+@app.callback(
+    Output({"type": "metric-value", "index": "pee-poo"}, "children"),
+    Input("store", "data"),
+)
+def pee_poo(data):
+    total_stats = TotalStats(pd.DataFrame(data))
+    return f"{total_stats.n_pee_today} / {total_stats.n_poo_today}"
+
+@app.callback(
     Output({"type": "metric-value", "index": "largest-count"}, "children"),
     Input("store", "data"),
 )
 def largest_count(data):
     total_stats = TotalStats(pd.DataFrame(data))
     return f"{total_stats.largest_meal} ml"
-
 
 # Figure callbacks
 @app.callback(
@@ -260,4 +300,4 @@ def summary_figure(data):
     return fig
 
 if __name__ == "__main__":
-    app.run(debug=False)
+    app.run(debug=True)
