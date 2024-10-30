@@ -5,18 +5,20 @@ from dash import html, dcc
 from .MetricCard import MetricCard
 from .FigureCard import FigureCard
 
+lg, md, sm = 2, 2, 4
+
 dashboard = dbc.Row(
     [
         dbc.Col(
             [
                 dbc.Row(
                     [
-                        dbc.Col(MetricCard("Totalt i dag", id="consumed-count"), lg=4, md=6, sm=12, width=12),
-                        dbc.Col(MetricCard("Måltider i dag", id="meals-count"), lg=4, md=6, sm=12, width=12),
-                        dbc.Col(MetricCard("Største måltid", id="largest-count"), lg=4, md=6, sm=12, width=12),
-                        dbc.Col(MetricCard("Sist måltid", id="last-meal"), lg=4, md=6, sm=12, width=12),
-                        dbc.Col(MetricCard("Tid siden måltid", id="delta-last-meal"), lg=4, md=6, sm=12, width=12),
-                        dbc.Col(MetricCard("I bleien", id="pee-poo"), lg=4, md=6, sm=12, width=12),
+                        dbc.Col(MetricCard("Totalt i dag", id="consumed-count"), lg=lg, md=md, sm=sm, width=6),
+                        dbc.Col(MetricCard("Måltider i dag", id="meals-count"), lg=lg, md=md, sm=sm, width=6),
+                        dbc.Col(MetricCard("Største måltid", id="largest-count"), lg=lg, md=md, sm=sm, width=6),
+                        dbc.Col(MetricCard("Sist måltid", id="last-meal"), lg=lg, md=md, sm=sm, width=6),
+                        dbc.Col(MetricCard("Tid siden måltid", id="delta-last-meal"), lg=lg, md=md, sm=sm, width=6),
+                        dbc.Col(MetricCard("I bleien", id="pee-poo"), lg=lg, md=md, sm=sm, width=6),
                     ]
                 ),
                 dbc.Row(
