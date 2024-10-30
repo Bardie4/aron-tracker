@@ -212,11 +212,24 @@ def render_graph(selected_date, data):
     filtered_df["Tid"] = pd.to_datetime(filtered_df["Tid"], format="%H:%M")
 
     # Create the graph for the selected date
-    fig = px.line(
+    fig = px.bar(
         filtered_df,
         x="Tid",
-        y="Cumulative_flaske",
-        markers=True,
+        y="Flaske",
+        title=f"Kumulativ melk for {selected_date}",
+        color_discrete_sequence=['gray'],  # Set the bar color to gray
+        opacity=0.25  # Set the opacity to 1.0 for fully opaque bars
+    )
+
+    # Add the cumulative line trace
+    fig.add_trace(
+        go.Scatter(
+            x=filtered_df["Tid"],
+            y=filtered_df["Cumulative_flaske"],
+            mode='lines+markers',
+            name='Kumulativ',
+            line=dict(color='blue', width=3),
+        )
     )
 
     # Bæsj

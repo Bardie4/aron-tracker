@@ -24,5 +24,5 @@ class FigureCard(dbc.Card):
                     delay_show=2000,
                 ),
             ],
-            className="mb-3 figure-card shadow",
+            className="mb-3 figure-card shadow-sm",
         )
