@@ -163,7 +163,9 @@ def meals_count(data):
 )
 def last_meal_time(data):
     total_stats = TotalStats(pd.DataFrame(data))
-    return f"{total_stats.last_meal_time.hour}:{total_stats.last_meal_time.minute}"
+    hh = f"{total_stats.last_meal_time.hour:02d}"
+    mm = f"{total_stats.last_meal_time.minute:02d}"
+    return f"{hh}:{mm}"
 
 @app.callback(
     Output({"type": "metric-value", "index": "delta-last-meal"}, "children"),
@@ -171,7 +173,8 @@ def last_meal_time(data):
 )
 def delta_last_meal(data):
     total_stats = TotalStats(pd.DataFrame(data))
-    return f"{total_stats.time_since_last_feed}"
+    t = total_stats.time_since_last_feed.split(":")
+    return f"{int(t[0])}h {int(t[1])}m"
 
 @app.callback(
     Output({"type": "metric-value", "index": "pee-poo"}, "children"),
@@ -179,7 +182,7 @@ def delta_last_meal(data):
 )
 def pee_poo(data):
     total_stats = TotalStats(pd.DataFrame(data))
-    return f"{total_stats.n_pee_today} / {total_stats.n_poo_today}"
+    return f"{total_stats.n_pee_today} 🟡 / {total_stats.n_poo_today} 🟤"
 
 @app.callback(
     Output({"type": "metric-value", "index": "largest-count"}, "children"),

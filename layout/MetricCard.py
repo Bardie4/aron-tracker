@@ -15,5 +15,5 @@ class MetricCard(dbc.Card):
                 html.P(title, id={"type": "metric-text", "index": id}),
             ],
             body=True,
-            className="mb-3",
+            className="mb-3 shadow-sm",
         )

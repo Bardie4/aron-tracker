@@ -6,46 +6,42 @@ from .MetricCard import MetricCard
 from .FigureCard import FigureCard
 
 dashboard = dbc.Row(
-    dbc.Col(
-        [
-            dbc.Row(
-                [
-                    dbc.Col(MetricCard("Totalt i dag", id="consumed-count"), width=4),
-                    dbc.Col(MetricCard("Måltider i dag", id="meals-count"), width=4),
-                    dbc.Col(MetricCard("Største måltid", id="largest-count"), width=4),
-                ]
-            ),
-            dbc.Row(
-                [
-                    dbc.Col(MetricCard("Sist måltid", id="last-meal"), width=4),
-                    dbc.Col(MetricCard("Δ sist måltid", id="delta-last-meal"), width=4),
-                    dbc.Col(MetricCard("Tiss/Bæsj", id="pee-poo"), width=4),
-                ]
-            ),
-            dbc.Row(
-                [
-                    dbc.Col(
-                        FigureCard(
-                            "Valgt dag",
-                            id="today-graph",
-                            description="Akkumulert konsummert morsmelkerstatning i dag.",
+    [
+        dbc.Col(
+            [
+                dbc.Row(
+                    [
+                        dbc.Col(MetricCard("Totalt i dag", id="consumed-count"), lg=4, md=6, sm=12, width=12),
+                        dbc.Col(MetricCard("Måltider i dag", id="meals-count"), lg=4, md=6, sm=12, width=12),
+                        dbc.Col(MetricCard("Største måltid", id="largest-count"), lg=4, md=6, sm=12, width=12),
+                        dbc.Col(MetricCard("Sist måltid", id="last-meal"), lg=4, md=6, sm=12, width=12),
+                        dbc.Col(MetricCard("Tid siden måltid", id="delta-last-meal"), lg=4, md=6, sm=12, width=12),
+                        dbc.Col(MetricCard("I bleien", id="pee-poo"), lg=4, md=6, sm=12, width=12),
+                    ]
+                ),
+                dbc.Row(
+                    [
+                        dbc.Col(
+                            FigureCard(
+                                "Valgt dag",
+                                id="today-graph",
+                                description="Akkumulert konsummert morsmelkerstatning i dag.",
+                            ),
+                            lg=7, md=12, sm=12, width=12,
                         ),
-                        sm=12,
-                        md=7,
-                    ),
-                    dbc.Col(
-                        FigureCard(
-                            "Historisk",
-                            id="history-graph",
-                            description="Summert konsummert morsmelkerstatning per dag.",
+                        dbc.Col(
+                            FigureCard(
+                                "Historisk",
+                                id="history-graph",
+                                description="Summert konsummert morsmelkerstatning per dag.",
+                            ),
+                            lg=5, md=12, sm=12, width=12,
                         ),
-                        sm=12,
-                        md=5,
-                    ),
-                ],
-                className="dashboard-row",
-            ),
-        ],
-    ),
+                    ],
+                    className="dashboard-row",
+                ),
+            ],
+        )
+    ],
     id="dashboard",
 )

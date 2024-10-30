@@ -17,12 +17,12 @@ class FigureCard(dbc.Card):
                     dcc.Graph(
                         id={"type": "graph", "index": id},
                         responsive=True,
-                        style={"height": "100%"},
+                        style={"height": "450px"},
                     ),
                     size="lg",
                     color="dark",
-                    delay_show=750,
+                    delay_show=2000,
                 ),
             ],
-            className="mb-3 figure-card",
+            className="mb-3 figure-card shadow",
         )
