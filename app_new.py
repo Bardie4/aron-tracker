@@ -99,7 +99,7 @@ def serve_layout():
                 dbc.Stack(
                     [
                         html.H1(
-                            "Aron tracker"
+                            "👩‍🍼 Aron tracker"
                         ),
                         dcc.Dropdown(
                             id="date-dropdown",
@@ -128,7 +128,7 @@ app.layout = serve_layout
 )
 def consumed_count(data):
     total_stats = TotalStats(pd.DataFrame(data))
-    return total_stats.total_today
+    return f"{total_stats.total_today} ml"
 
 
 @app.callback(
@@ -146,7 +146,7 @@ def meals_count(data):
 )
 def largest_count(data):
     total_stats = TotalStats(pd.DataFrame(data))
-    return total_stats.largest_meal
+    return f"{total_stats.largest_meal} ml"
 
 
 # Figure callbacks
@@ -173,60 +173,64 @@ def render_graph(selected_date, data):
         filtered_df,
         x="Tid",
         y="Cumulative_flaske",
-        title=f"Kumulativ melk for {selected_date}",
         markers=True,
     )
 
     # Bæsj
-    # avforing_df = filtered_df[filtered_df["Avføring"] == "A"]
-    # fig.add_trace(
-    #     go.Scatter(
-    #         x=avforing_df["Tid"],
-    #         y=avforing_df["Cumulative_flaske"],
-    #         mode="markers",
-    #         marker=dict(symbol="diamond", size=16, color="orange"),
-    #         name="Bæsj",
-    #     )
-    # )
+    avforing_df = filtered_df[filtered_df["Avføring"] == "A"]
+    fig.add_trace(
+        go.Scatter(
+            x=avforing_df["Tid"],
+            y=avforing_df["Cumulative_flaske"],
+            mode="markers",
+            marker=dict(symbol="diamond", size=16, color="orange"),
+            name="Bæsj",
+        )
+    )
 
     # Tiss
-    # urin_df = filtered_df[filtered_df["Urin"] == "U"]
-    # fig.add_trace(
-    #     go.Scatter(
-    #         x=urin_df["Tid"],
-    #         y=urin_df["Cumulative_flaske"],
-    #         mode="markers",
-    #         marker=dict(symbol="star", size=12, color="palegoldenrod"),
-    #         name="Tiss",
-    #     )
-    # )
+    urin_df = filtered_df[filtered_df["Urin"] == "U"]
+    fig.add_trace(
+        go.Scatter(
+            x=urin_df["Tid"],
+            y=urin_df["Cumulative_flaske"],
+            mode="markers",
+            marker=dict(symbol="star", size=12, color="palegoldenrod"),
+            name="Tiss",
+        )
+    )
 
     # Mål
-    # fig.add_hline(
-    #     y=total_stats.largest_meal,
-    #     line_color="red",
-    #     line_width=3,
-    #     annotation_text="Største måltid",
-    #     annotation_position="bottom right",
-    # )
+    fig.add_hline(
+        y=total_stats.largest_meal,
+        line_color="red",
+        line_width=3,
+        annotation_text="Største måltid",
+        annotation_position="bottom right",
+    )
 
     # Ideallinje
-    # fig.add_trace(
-    #     go.Scatter(
-    #         x=["1900-01-01 00:00:00.0000", "1900-01-01 23:59:59.0000"],
-    #         y=[0, total_stats.largest_meal],
-    #         mode='lines',
-    #         name='Daily Goal',
-    #         opacity=0.25,
-    #         line=dict(color='gray', width=2, dash='dash'),
-    #     )
-    # )
+    fig.add_trace(
+        go.Scatter(
+            x=["1900-01-01 00:00:00.0000", "1900-01-01 23:59:59.0000"],
+            y=[0, total_stats.largest_meal],
+            mode='lines',
+            name='Daily Goal',
+            opacity=0.25,
+            line=dict(color='gray', width=2, dash='dash'),
+        )
+    )
 
     # Update layout for 'Tid' axis to treat as a datetime
-    # fig.update_xaxes(
-    #     tickformat="%H:%M",  # Format the ticks as hours and minutes
-    #     tickmode="auto",  # Use automatic tick mode for datetime data
-    # )
+    fig.update_xaxes(
+        tickformat="%H:%M",  # Format the ticks as hours and minutes
+        tickmode="auto",  # Use automatic tick mode for datetime data
+    )
+
+    fig.update_layout(
+        xaxis_title="Tid",
+        yaxis_title="ml"
+    )
 
     return fig
 
@@ -242,97 +246,18 @@ def summary_figure(data):
     fig = px.bar(
         x=list(total_stats.total_per_day.keys()),
         y=list(total_stats.total_per_day.values()),
-        title="Sum of Flaske per Day",
         labels={"Flaske": "Sum of Flaske", "Dato": "Date"},
     )
 
     # Update the layout of the bar chart if necessary
     fig.update_layout(
         xaxis_title="Dato",
-        yaxis_title="Konsumert melk (ml)",
+        yaxis_title="ml",
         xaxis={"type": "category"},  # Treat 'Dato' as a categorical variable
         yaxis={"type": "linear"},  # Ensure 'Flaske' is treated as a linear scale
     )
 
     return fig
 
-
-
-# @app.callback(
-#     Output({"type": "graph", "index": "growth"}, "figure"),
-#     Input("filters-store", "data"),
-# )
-# def recent_content_figure(filters):
-#     data = data_connector.get_change_data(filters)
-#     platform_order = [
-#         i for i in data_connector.platform_order if i in set(data.platform)
-#     ]
-
-#     platforms = pd.Series(platform_order)
-#     data.set_index('platform', inplace=True)
-
-#     figure = go.Figure(
-#         data=[
-#             go.Bar(
-#                 x=platforms,
-#                 y=platforms.apply(lambda x: data.loc[x, 'net_change'] if x in data.index else 0),
-#                 marker={'color' : 'white', 'opacity' : 0},
-#                 name='Net Change',
-#                 hovertemplate='<b>Net Change: %{y}</b><extra></extra>'
-#             ),
-#             go.Bar(
-#                 x=platforms,
-#                 y=platforms.apply(lambda x: data.loc[x, 'movie_gained'] if x in data.index else 0),
-#                 width=0.4,
-#                 offset=-0.4,
-#                 name='Movies Gained',
-#                 marker={'color' : px.colors.sequential.dense[4]}
-#             ),
-#             go.Bar(
-#                 x=platforms,
-#                 y=platforms.apply(lambda x: data.loc[x, 'movie_lost'] if x in data.index else 0),
-#                 width=0.4,
-#                 offset=-0.4,
-#                 name='Movies Lost',
-#                 marker={'color' : px.colors.sequential.dense[2]}
-#             ),
-#             go.Bar(
-#                 x=platforms,
-#                 y=platforms.apply(lambda x: data.loc[x, 'tv_gained'] if x in data.index else 0),
-#                 width=0.4,
-#                 offset=0,
-#                 name='TV Gained',
-#                 marker={'color' : px.colors.sequential.dense[-5]}
-#             ),
-#             go.Bar(
-#                 x=platforms,
-#                 y=platforms.apply(lambda x: data.loc[x, 'tv_lost'] if x in data.index else 0),
-#                 width=0.4,
-#                 offset=0,
-#                 name='TV Lost',
-#                 marker={'color' : px.colors.sequential.dense[-3]}
-#             ), 
-#         ],
-#         layout=go.Layout(
-#             showlegend=False,
-#             xaxis={
-#                 'title' : 'Platform',
-#                 'ticktext' : platforms,
-#                 'tickangle' : 45
-#             },
-#             yaxis={
-#                 'title' : 'Title Count'
-#             },
-#             template='plotly_white',
-#             hovermode='x unified',
-#         )
-#     )
-
-#     return figure
-
-
 if __name__ == "__main__":
-    if os.environ.get("environment") == "heroku":
-        app.run(debug=False)
-    else:
-        app.run(debug=True)
+    app.run(debug=False)

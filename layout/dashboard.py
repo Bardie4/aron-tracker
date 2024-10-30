@@ -19,7 +19,7 @@ dashboard = dbc.Row(
                 [
                     dbc.Col(
                         FigureCard(
-                            "I dag",
+                            "Valgt dag",
                             id="today-graph",
                             description="Akkumulert konsummert morsmelkerstatning i dag.",
                         ),
@@ -28,7 +28,7 @@ dashboard = dbc.Row(
                     ),
                     dbc.Col(
                         FigureCard(
-                            "Måltidsmengde per dag",
+                            "Historisk",
                             id="history-graph",
                             description="Summert konsummert morsmelkerstatning per dag.",
                         ),
