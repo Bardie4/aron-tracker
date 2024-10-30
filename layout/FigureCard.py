@@ -9,7 +9,7 @@ class FigureCard(dbc.Card):
             children=[
                 html.Div(
                     [
-                        html.H5(title, className="m-0 align-center"),
+                        html.H2(title, className="m-0 align-center"),
                     ],
                     className="d-flex justify-content-between align-center p-3",
                 ),
