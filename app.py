@@ -1,11 +1,17 @@
-import dash
-from dash import html, dcc, dash_table, Input, Output
 import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
 import plotly.express as px
-import plotly.graph_objs as go
+import os
+import json
+import dash
+import dash_bootstrap_components as dbc
+from dash import Dash, html, dcc, Input, Output, State, MATCH, ALL
+from sqlalchemy import create_engine
+from dataclasses import dataclass
+from layout.dashboard import dashboard
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
-from dataclasses import dataclass
 
 @dataclass
 class TotalStats:
@@ -23,14 +29,18 @@ class TotalStats:
         return self.total_per_day[list(self.total_per_day.keys())[-1]]
 
     @property
-    def time_since_last_feed(self):
+    def last_meal_time(self):
         last_entry = self._df.iloc[-1]
         last_entry_date = datetime.strptime(last_entry["Dato"], "%d.%m.%Y").date()
         last_entry_time = datetime.strptime(last_entry["Tid"], "%H:%M").time()
         norway_timezone = ZoneInfo("Europe/Oslo")
-        last_entry_datetime = datetime.combine(last_entry_date, last_entry_time, tzinfo=norway_timezone)
+        return datetime.combine(last_entry_date, last_entry_time, tzinfo=norway_timezone)
+
+    @property
+    def time_since_last_feed(self):
+        norway_timezone = ZoneInfo("Europe/Oslo") 
         current_date = datetime.now(norway_timezone)
-        time_difference = current_date - last_entry_datetime
+        time_difference = current_date - self.last_meal_time
         total_seconds = time_difference.total_seconds()
         hours = int(total_seconds // 3600)
         minutes = int((total_seconds % 3600) // 60)
@@ -38,9 +48,21 @@ class TotalStats:
         return time_difference_formatted
 
     @property
-    def n_feeds_today(self):
+    def df_last_day(self):
         last_day = self._df.iloc[-1]["Dato"]
-        return len(self._df[self._df["Dato"] == last_day])
+        return self._df[self._df["Dato"] == last_day]
+
+    @property
+    def n_feeds_today(self):
+        return len(self.df_last_day)
+
+    @property
+    def n_pee_today(self):
+        return len(self.df_last_day[self.df_last_day["Urin"] == "U"])
+
+    @property
+    def n_poo_today(self):
+        return len(self.df_last_day[self.df_last_day["Avføring"] == "A"])
 
     @property
     def largest_meal(self):
@@ -48,22 +70,47 @@ class TotalStats:
         max_day = daily_sum.idxmax()
         return daily_sum[max_day]
 
+    @property
+    def ideal_now(self):
+        norway_timezone = ZoneInfo("Europe/Oslo")
+        # Get the time of the last entry
+        last_entry_time = self.last_meal_time
+        
+        # Calculate the start of the day for the last entry
+        start_of_day = datetime.combine(last_entry_time.date(), datetime.min.time(), tzinfo=norway_timezone)
+        end_of_day = datetime.combine(last_entry_time.date(), datetime.max.time(), tzinfo=norway_timezone)
+        
+        # Calculate the fraction of the day that has passed up to the last entry
+        fraction_of_day_passed = (last_entry_time - start_of_day) / (end_of_day - start_of_day)
+
+        # Calculate the ideal intake up to the time of the last entry
+        ideal_intake_now = self.largest_meal * fraction_of_day_passed
+
+        return int(ideal_intake_now)
+
     def feeds_for_day(self, date):
         # Format as dict of time: amount
         feeds = self._df[self._df["Dato"] == date].set_index("Tid")["Flaske"].to_dict()
         return feeds
-    
-URL = "https://docs.google.com/spreadsheets/d/1-NblbDmCxDEi5_BCSeVwzzMxZza1Mdbbv8HIPz8XXBI/export?format=csv"
-df = pd.DataFrame()
-total_stats = TotalStats(df)
-
 
 def sort_dates(dates):
     dates_as_datetime = [datetime.strptime(date, "%d.%m.%Y") for date in dates]
     dates_as_datetime.sort()
     return [datetime.strftime(date, "%d.%m.%Y") for date in dates_as_datetime]
 
-app = dash.Dash(__name__)
+URL = "https://docs.google.com/spreadsheets/d/1-NblbDmCxDEi5_BCSeVwzzMxZza1Mdbbv8HIPz8XXBI/export?format=csv"
+df = pd.DataFrame()
+total_stats = TotalStats(df)
+
+app = Dash(
+    __name__,
+    title="Streaming Metrics",
+    external_stylesheets=[
+        dbc.themes.BOOTSTRAP,
+        "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200",  # Icons
+        "https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap",  # Font
+    ],
+)
 server = app.server
 
 def serve_layout():
@@ -79,91 +126,95 @@ def serve_layout():
     # Store the DataFrame in dcc.Store for access by the callback
     return html.Div(
         [
-            dcc.Store(id='data-store', data=df.to_dict('records')),
-            html.H1("👶🏼 Aron 🍼-tracker"),
-            html.H2("Statistikk"),
-            html.Div(id="stats-container"),
-            html.H2("Velg dato"),
-            dcc.Dropdown(
-                id="date-dropdown",
-                options=dropdown_options,
-                value=dropdown_value,
+            dcc.Store(
+                id="store",
+                data=df.to_dict('records')
             ),
-            html.Div(id="graph-container"),
-            html.H2("Mat per dag"),
-            html.Div(id="bar-chart-container"),
-        ]
+            dbc.Container(
+                dbc.Stack(
+                    [
+                        html.H1(
+                            "👩‍🍼 Aron tracker"
+                        ),
+                        dcc.Dropdown(
+                            id="date-dropdown",
+                            options=dropdown_options,
+                            value=dropdown_value,
+                        ),
+                        dashboard,
+                    ],
+                    gap=3,
+                ),
+                id="content",
+                className="p-3",
+            ),
+        ],
+        id="page",
     )
 
-
-# Set the app.layout to the serve_layout function
 app.layout = serve_layout
 
-# === STATS ===
+
+
+# Metric card callbacks
 @app.callback(
-    Output("stats-container", "children"),
-    [Input("date-dropdown", "value"),
-     Input("data-store", "data")]
+    Output({"type": "metric-value", "index": "consumed-count"}, "children"),
+    Input("store", "data"),
 )
-def render_stats(selected_date, data):
-    df = pd.DataFrame(data)
-    total_stats = TotalStats(df)
-    return html.Div(
-        [
-            html.P(f"Totalt i dag: {total_stats.total_today} ml"),
-            html.P(f"Antall måltider i dag: {total_stats.n_feeds_today}"),
-            html.P(f"Tid siden forrige måltid: {total_stats.time_since_last_feed}"),
-            html.P(f"Største måltid: {total_stats.largest_meal} ml")
-        ]
-    )
+def consumed_count(data):
+    total_stats = TotalStats(pd.DataFrame(data))
+    pre = "⭐️" if total_stats.total_today > total_stats.ideal_now else ""
+    return f"{pre} {total_stats.total_today}/{total_stats.ideal_now} ml"
 
-# === BAR CHART ===
+
 @app.callback(
-    Output("bar-chart-container", "children"),
-    [Input("data-store", "data")]
+    Output({"type": "metric-value", "index": "meals-count"}, "children"),
+    Input("store", "data"),
 )
-def render_bar_chart(data):
-    df = pd.DataFrame(data)
-    total_stats = TotalStats(df)
-
-    # Create the bar chart from the total stats
-    bar_chart_fig = px.bar(
-        x=list(total_stats.total_per_day.keys()),
-        y=list(total_stats.total_per_day.values()),
-        title="Sum of Flaske per Day",
-        labels={"Flaske": "Sum of Flaske", "Dato": "Date"},
-    )
-
-    # Update the layout of the bar chart if necessary
-    bar_chart_fig.update_layout(
-        xaxis_title="Dato",
-        yaxis_title="Konsumert melk (ml)",
-        xaxis={"type": "category"},  # Treat 'Dato' as a categorical variable
-        yaxis={"type": "linear"},  # Ensure 'Flaske' is treated as a linear scale
-    )
-
-    return dcc.Graph(figure=bar_chart_fig)
+def meals_count(data):
+    total_stats = TotalStats(pd.DataFrame(data))
+    return f"{total_stats.n_feeds_today} stk"
 
 
-# === DATE DROPDOWN ===
 @app.callback(
-    Output("date-dropdown", "options"),
-    Output("date-dropdown", "value"),
-    [Input("date-dropdown", "value"),
-     Input("data-store", "data")]
+    Output({"type": "metric-value", "index": "last-meal"}, "children"),
+    Input("store", "data"),
 )
-def set_dropdown_options(selected_date, data):
-    df = pd.DataFrame(data)
-    unique_dates = sort_dates(df["Dato"].unique())
-    options = [{"label": date, "value": date} for date in unique_dates]
-    value = unique_dates[-1] if selected_date is None else selected_date
-    return options, value
+def last_meal_time(data):
+    total_stats = TotalStats(pd.DataFrame(data))
+    hh = f"{total_stats.last_meal_time.hour:02d}"
+    mm = f"{total_stats.last_meal_time.minute:02d}"
+    return f"{hh}:{mm}"
 
-# === GRAPH ===
 @app.callback(
-    Output("graph-container", "children"),
-    [Input("date-dropdown", "value"),
-     Input("data-store", "data")]
+    Output({"type": "metric-value", "index": "delta-last-meal"}, "children"),
+    Input("store", "data"),
+)
+def delta_last_meal(data):
+    total_stats = TotalStats(pd.DataFrame(data))
+    t = total_stats.time_since_last_feed.split(":")
+    return f"{int(t[0])}h {int(t[1])}m"
+
+@app.callback(
+    Output({"type": "metric-value", "index": "pee-poo"}, "children"),
+    Input("store", "data"),
+)
+def pee_poo(data):
+    total_stats = TotalStats(pd.DataFrame(data))
+    return f"{total_stats.n_pee_today} 🟡 / {total_stats.n_poo_today} 🟤"
+
+@app.callback(
+    Output({"type": "metric-value", "index": "largest-count"}, "children"),
+    Input("store", "data"),
+)
+def largest_count(data):
+    total_stats = TotalStats(pd.DataFrame(data))
+    return f"{total_stats.largest_meal} ml"
+
+# Figure callbacks
+@app.callback(
+    Output({"type": "graph", "index": "today-graph"}, "figure"),
+    [Input("date-dropdown", "value"), Input("store", "data")]
 )
 def render_graph(selected_date, data):
     df = pd.DataFrame(data)
@@ -180,12 +231,25 @@ def render_graph(selected_date, data):
     filtered_df["Tid"] = pd.to_datetime(filtered_df["Tid"], format="%H:%M")
 
     # Create the graph for the selected date
-    fig = px.line(
+    fig = px.bar(
         filtered_df,
         x="Tid",
-        y="Cumulative_flaske",
-        title=f"Kumulativ melk for {selected_date}",
-        markers=True,
+        y="Flaske",
+        text="Flaske",
+        color_discrete_sequence=['gray'],  # Set the bar color to gray
+        opacity=0.25  # Set the opacity to 1.0 for fully opaque bars
+    )
+    fig.update_traces(texttemplate='%{text}', textposition='outside')
+
+    # Add the cumulative line trace
+    fig.add_trace(
+        go.Scatter(
+            x=filtered_df["Tid"],
+            y=filtered_df["Cumulative_flaske"],
+            mode='lines+markers',
+            name='Kumulativ',
+            line=dict(color='blue', width=3),
+        )
     )
 
     # Bæsj
@@ -239,9 +303,57 @@ def render_graph(selected_date, data):
         tickmode="auto",  # Use automatic tick mode for datetime data
     )
 
-    return dcc.Graph(figure=fig)
+    fig.update_layout(
+        xaxis_title="Tid",
+        yaxis_title="ml",
+        showlegend=False
+    )
+
+    return fig
 
 
-# Run the app
+@app.callback(
+    Output({"type": "graph", "index": "history-graph"}, "figure"),
+    Input("store", "data"),
+)
+def summary_figure(data):
+    # Convert the data to a DataFrame
+    df = pd.DataFrame(data)
+    df['Dato'] = pd.to_datetime(df['Dato'])  # Ensure 'Dato' is a datetime object
+    
+    # Group by 'Dato' and sum the 'Flaske' values for each date
+    daily_totals = df.groupby('Dato')['Flaske'].sum().reset_index()
+    daily_totals['7_day_avg'] = daily_totals['Flaske'].rolling(window=7, min_periods=1).mean()
+    daily_totals['Dato'] = daily_totals['Dato'].dt.strftime('%d-%m-%y')
+
+    # Create the bar chart from the daily totals
+    fig = px.bar(
+        daily_totals,
+        x='Dato',
+        y='Flaske',
+        labels={"y": "Sum of Flaske", "x": "Date"},
+    )
+
+    # Add the 7-day average line to the bar chart
+    fig.add_trace(
+        go.Scatter(
+            x=daily_totals['Dato'],
+            y=daily_totals['7_day_avg'],
+            mode='lines',
+            name='7 Day Average'
+        )
+    )
+
+    # Update the layout of the bar chart if necessary
+    fig.update_layout(
+        xaxis_title="Dato",
+        yaxis_title="ml",
+        xaxis={"type": "category"},  # Treat 'Dato' as a categorical variable
+        yaxis={"type": "linear"},    # Ensure 'Flaske' is treated as a linear scale
+        showlegend=False
+    )
+
+    return fig
+
 if __name__ == "__main__":
     app.run(debug=True)
