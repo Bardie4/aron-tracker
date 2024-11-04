@@ -15,7 +15,7 @@ dashboard = dbc.Row(
                     [
                         dbc.Col(MetricCard("Totalt i dag", id="consumed-count"), lg=lg, md=md, sm=sm, width=6),
                         dbc.Col(MetricCard("Måltider i dag", id="meals-count"), lg=lg, md=md, sm=sm, width=6),
-                        dbc.Col(MetricCard("Største måltid", id="largest-count"), lg=lg, md=md, sm=sm, width=6),
+                        dbc.Col(MetricCard("Måltid ideal", id="largest-count"), lg=lg, md=md, sm=sm, width=6),
                         dbc.Col(MetricCard("Sist måltid", id="last-meal"), lg=lg, md=md, sm=sm, width=6),
                         dbc.Col(MetricCard("Tid siden måltid", id="delta-last-meal"), lg=lg, md=md, sm=sm, width=6),
                         dbc.Col(MetricCard("I bleien", id="pee-poo"), lg=lg, md=md, sm=sm, width=6),

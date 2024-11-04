@@ -11,7 +11,7 @@ class MetricCard(dbc.Card):
     ):
         super().__init__(
             children=[
-                html.H3("-", id={"type": "metric-value", "index": id}),
+                html.H5("-", id={"type": "metric-value", "index": id}),
                 html.P(title, id={"type": "metric-text", "index": id}),
             ],
             body=True,

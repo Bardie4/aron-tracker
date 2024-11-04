@@ -163,8 +163,7 @@ app.layout = serve_layout
 )
 def consumed_count(data):
     total_stats = TotalStats(pd.DataFrame(data))
-    pre = "⭐️" if total_stats.total_today > total_stats.ideal_now else ""
-    return f"{pre} {total_stats.total_today}/{total_stats.ideal_now} ml"
+    return total_stats.total_today
 
 
 @app.callback(
@@ -209,7 +208,7 @@ def pee_poo(data):
 )
 def largest_count(data):
     total_stats = TotalStats(pd.DataFrame(data))
-    return f"{total_stats.largest_meal} ml"
+    return f"{total_stats.largest_meal} ({total_stats.ideal_now}) ml"
 
 # Figure callbacks
 @app.callback(
@@ -319,12 +318,15 @@ def render_graph(selected_date, data):
 def summary_figure(data):
     # Convert the data to a DataFrame
     df = pd.DataFrame(data)
-    df['Dato'] = pd.to_datetime(df['Dato'])  # Ensure 'Dato' is a datetime object
+    df['Dato'] = pd.to_datetime(df['Dato'], dayfirst=True)  # Ensure 'Dato' is a datetime object
     
     # Group by 'Dato' and sum the 'Flaske' values for each date
     daily_totals = df.groupby('Dato')['Flaske'].sum().reset_index()
     daily_totals['7_day_avg'] = daily_totals['Flaske'].rolling(window=7, min_periods=1).mean()
     daily_totals['Dato'] = daily_totals['Dato'].dt.strftime('%d-%m-%y')
+
+    # Exclude the last day from the 7-day average series
+    average_data = daily_totals[:-1]
 
     # Create the bar chart from the daily totals
     fig = px.bar(
@@ -334,11 +336,11 @@ def summary_figure(data):
         labels={"y": "Sum of Flaske", "x": "Date"},
     )
 
-    # Add the 7-day average line to the bar chart
+    # Add the 7-day average line to the bar chart, excluding the last day
     fig.add_trace(
         go.Scatter(
-            x=daily_totals['Dato'],
-            y=daily_totals['7_day_avg'],
+            x=average_data['Dato'],
+            y=average_data['7_day_avg'],
             mode='lines',
             name='7 Day Average'
         )
@@ -350,7 +352,7 @@ def summary_figure(data):
         yaxis_title="ml",
         xaxis={"type": "category"},  # Treat 'Dato' as a categorical variable
         yaxis={"type": "linear"},    # Ensure 'Flaske' is treated as a linear scale
-        showlegend=False
+        showlegend=False,
     )
 
     return fig
