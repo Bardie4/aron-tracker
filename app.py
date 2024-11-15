@@ -1,16 +1,11 @@
 import pandas as pd
-import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
-import os
-import json
-import dash
 import dash_bootstrap_components as dbc
-from dash import Dash, html, dcc, Input, Output, State, MATCH, ALL
-from sqlalchemy import create_engine
+from dash import Dash, html, dcc, Input, Output
 from dataclasses import dataclass
 from layout.dashboard import dashboard
-from datetime import datetime, timezone
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 @dataclass
@@ -18,18 +13,18 @@ class TotalStats:
     _df: pd.DataFrame
 
     @property
-    def total_per_day(self):
+    def total_per_day(self) -> dict:
         # format as dict of date: total
         total = self._df.groupby("Dato")["Flaske"].sum().to_dict()
         # Sort the dictionary by date
         return dict(sorted(total.items(), key=lambda x: datetime.strptime(x[0], "%d.%m.%Y")))
 
     @property
-    def total_today(self):
+    def total_today(self) -> int:
         return self.total_per_day[list(self.total_per_day.keys())[-1]]
 
     @property
-    def last_meal_time(self):
+    def last_meal_time(self) -> datetime:
         last_entry = self._df.iloc[-1]
         last_entry_date = datetime.strptime(last_entry["Dato"], "%d.%m.%Y").date()
         last_entry_time = datetime.strptime(last_entry["Tid"], "%H:%M").time()
@@ -37,7 +32,25 @@ class TotalStats:
         return datetime.combine(last_entry_date, last_entry_time, tzinfo=norway_timezone)
 
     @property
-    def time_since_last_feed(self):
+    def last_poo_time(self) -> datetime:
+        last_entry = self._df[self._df["Avføring"] == "A"].iloc[-1]
+        last_entry_date = datetime.strptime(last_entry["Dato"], "%d.%m.%Y").date()
+        last_entry_time = datetime.strptime(last_entry["Tid"], "%H:%M").time()
+        norway_timezone = ZoneInfo("Europe/Oslo")
+        return datetime.combine(last_entry_date, last_entry_time, tzinfo=norway_timezone) 
+
+    @property
+    def current_time(self) -> datetime:
+        # Get the current time in UTC
+        current_utc_time = datetime.utcnow()
+        # Define the Norway timezone
+        norway_timezone = ZoneInfo("Europe/Oslo")
+        # Convert the current UTC time to Norway time
+        current_oslo_time = current_utc_time.astimezone(norway_timezone)
+        return current_oslo_time
+
+    @property
+    def time_since_last_feed(self) -> str:
         norway_timezone = ZoneInfo("Europe/Oslo") 
         current_date = datetime.now(norway_timezone)
         time_difference = current_date - self.last_meal_time
@@ -48,30 +61,41 @@ class TotalStats:
         return time_difference_formatted
 
     @property
-    def df_last_day(self):
+    def time_since_last_poo(self) -> str:
+        norway_timezone = ZoneInfo("Europe/Oslo") 
+        current_date = datetime.now(norway_timezone)
+        time_difference = current_date - self.last_poo_time
+        total_seconds = time_difference.total_seconds()
+        hours = int(total_seconds // 3600)
+        minutes = int((total_seconds % 3600) // 60)
+        time_difference_formatted = f"{hours:02d}:{minutes:02d}"
+        return time_difference_formatted
+
+    @property
+    def df_last_day(self) -> pd.DataFrame:
         last_day = self._df.iloc[-1]["Dato"]
         return self._df[self._df["Dato"] == last_day]
 
     @property
-    def n_feeds_today(self):
+    def n_feeds_today(self) -> int:
         return len(self.df_last_day)
 
     @property
-    def n_pee_today(self):
+    def n_pee_today(self) -> int:
         return len(self.df_last_day[self.df_last_day["Urin"] == "U"])
 
     @property
-    def n_poo_today(self):
+    def n_poo_today(self) -> int:
         return len(self.df_last_day[self.df_last_day["Avføring"] == "A"])
 
     @property
-    def largest_meal(self):
+    def largest_meal(self) -> int:
         daily_sum = self._df.groupby("Dato")["Flaske"].sum()
         max_day = daily_sum.idxmax()
         return daily_sum[max_day]
 
     @property
-    def ideal_now(self):
+    def ideal_now(self) -> int:
         norway_timezone = ZoneInfo("Europe/Oslo")
         # Get the time of the last entry
         last_entry_time = self.last_meal_time
@@ -87,6 +111,16 @@ class TotalStats:
         ideal_intake_now = self.largest_meal * fraction_of_day_passed
 
         return int(ideal_intake_now)
+
+    @property
+    def suggested_meal(self):
+        norway_timezone = ZoneInfo("Europe/Oslo") 
+        current_date = datetime.now(norway_timezone)
+        time_difference = current_date - self.last_meal_time
+
+        return int(self.largest_meal * (time_difference.total_seconds() / (60*60*24)))
+
+
 
     def feeds_for_day(self, date):
         # Format as dict of time: amount
@@ -163,7 +197,7 @@ app.layout = serve_layout
 )
 def consumed_count(data):
     total_stats = TotalStats(pd.DataFrame(data))
-    return total_stats.total_today
+    return f"{total_stats.total_today} ({total_stats.ideal_now}) ml"
 
 
 @app.callback(
@@ -174,6 +208,13 @@ def meals_count(data):
     total_stats = TotalStats(pd.DataFrame(data))
     return f"{total_stats.n_feeds_today} stk"
 
+@app.callback(
+    Output({"type": "metric-value", "index": "largest-count"}, "children"),
+    Input("store", "data"),
+)
+def largest_meal(data):
+    total_stats = TotalStats(pd.DataFrame(data))
+    return f"{total_stats.largest_meal} ml"
 
 @app.callback(
     Output({"type": "metric-value", "index": "last-meal"}, "children"),
@@ -203,12 +244,20 @@ def pee_poo(data):
     return f"{total_stats.n_pee_today} 🟡 / {total_stats.n_poo_today} 🟤"
 
 @app.callback(
-    Output({"type": "metric-value", "index": "largest-count"}, "children"),
+    Output({"type": "metric-value", "index": "suggested-meal"}, "children"),
     Input("store", "data"),
 )
-def largest_count(data):
+def suggested_meal(data):
     total_stats = TotalStats(pd.DataFrame(data))
-    return f"{total_stats.largest_meal} ({total_stats.ideal_now}) ml"
+    return f"{total_stats.suggested_meal} ml"
+
+@app.callback(
+    Output({"type": "metric-value", "index": "delta-last-poo"}, "children"),
+    Input("store", "data"),
+)
+def delta_last_poo(data):
+    total_stats = TotalStats(pd.DataFrame(data))
+    return f"{total_stats.time_since_last_poo}"
 
 # Figure callbacks
 @app.callback(
