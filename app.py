@@ -246,8 +246,8 @@ def last_meal_time(data):
 )
 def delta_last_meal(data):
     total_stats = TotalStats(pd.DataFrame(data))
-    t = total_stats.time_since_last_feed.split(":")
-    return f"{int(t[0])}h {int(t[1])}m"
+    h, m = total_stats.time_since_last_feed.split(":")
+    return f"{int(h)}h {int(m)}m"
 
 
 @app.callback(
@@ -274,7 +274,8 @@ def suggested_meal(data):
 )
 def delta_last_poo(data):
     total_stats = TotalStats(pd.DataFrame(data))
-    return f"{total_stats.time_since_last_poo}"
+    h, m = total_stats.time_since_last_poo.split(":")
+    return f"{int(h)}h {int(m)}m"
 
 
 # Figure callbacks
@@ -436,8 +437,9 @@ def last_day_table(selected_date, data):
     df = pd.DataFrame(data)
     # Filter the DataFrame for the selected date
     filtered_df = df[df["Dato"] == selected_date]
+    filtered_df = filtered_df[["Tid", "Flaske", "Notat"]]
 
-    columns = [{"name": i, "id": i} for i in df.columns]
+    columns = [{"name": i, "id": i} for i in filtered_df.columns]
 
     # Convert the filtered DataFrame to a dictionary for the DataTable
     return filtered_df.to_dict("records"), columns

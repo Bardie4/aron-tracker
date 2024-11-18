@@ -2,6 +2,7 @@ import dash_bootstrap_components as dbc
 from dash import dash_table
 from .MetricCard import MetricCard
 from .FigureCard import FigureCard
+from .DataCard import DataCard
 
 lg, md, sm, width = 2, 2, 4, 6
 
@@ -99,10 +100,9 @@ dashboard = dbc.Row(
                 dbc.Row(
                     [
                         dbc.Col(
-                            dash_table.DataTable(
+                            DataCard(
+                                "Data",
                                 id="selected-day-table",
-                                columns=[],  # Initialize with no columns
-                                data=[],  # Initialize with no data
                             ),
                         )
                     ]
