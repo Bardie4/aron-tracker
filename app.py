@@ -2,22 +2,36 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 import dash_bootstrap_components as dbc
-from dash import Dash, html, dcc, Input, Output, dash_table
+from dash import Dash, html, dcc, Input, Output
 from dataclasses import dataclass
 from layout.dashboard import dashboard
 from datetime import datetime
 from zoneinfo import ZoneInfo
+import dash_daq as daq
 
 
 @dataclass
 class TotalStats:
     _df: pd.DataFrame
 
+    def _get_last_day(self):
+        return self._df.iloc[-1]["Dato"]
+
+    def _get_last_entry(self, column, value):
+        return self._df[self._df[column] == value].iloc[-1]
+
+    def _calculate_time_difference(self, last_time):
+        norway_timezone = ZoneInfo("Europe/Oslo")
+        current_date = datetime.now(norway_timezone)
+        time_difference = current_date - last_time
+        total_seconds = time_difference.total_seconds()
+        hours = int(total_seconds // 3600)
+        minutes = int((total_seconds % 3600) // 60)
+        return f"{hours:02d}:{minutes:02d}"
+
     @property
     def total_per_day(self) -> dict:
-        # format as dict of date: total
         total = self._df.groupby("Dato")["Flaske"].sum().to_dict()
-        # Sort the dictionary by date
         return dict(
             sorted(total.items(), key=lambda x: datetime.strptime(x[0], "%d.%m.%Y"))
         )
@@ -38,7 +52,7 @@ class TotalStats:
 
     @property
     def last_poo_time(self) -> datetime:
-        last_entry = self._df[self._df["Avføring"] == "A"].iloc[-1]
+        last_entry = self._get_last_entry("Avføring", "A")
         last_entry_date = datetime.strptime(last_entry["Dato"], "%d.%m.%Y").date()
         last_entry_time = datetime.strptime(last_entry["Tid"], "%H:%M").time()
         norway_timezone = ZoneInfo("Europe/Oslo")
@@ -47,40 +61,16 @@ class TotalStats:
         )
 
     @property
-    def current_time(self) -> datetime:
-        # Get the current time in UTC
-        current_utc_time = datetime.utcnow()
-        # Define the Norway timezone
-        norway_timezone = ZoneInfo("Europe/Oslo")
-        # Convert the current UTC time to Norway time
-        current_oslo_time = current_utc_time.astimezone(norway_timezone)
-        return current_oslo_time
-
-    @property
     def time_since_last_feed(self) -> str:
-        norway_timezone = ZoneInfo("Europe/Oslo")
-        current_date = datetime.now(norway_timezone)
-        time_difference = current_date - self.last_meal_time
-        total_seconds = time_difference.total_seconds()
-        hours = int(total_seconds // 3600)
-        minutes = int((total_seconds % 3600) // 60)
-        time_difference_formatted = f"{hours:02d}:{minutes:02d}"
-        return time_difference_formatted
+        return self._calculate_time_difference(self.last_meal_time)
 
     @property
     def time_since_last_poo(self) -> str:
-        norway_timezone = ZoneInfo("Europe/Oslo")
-        current_date = datetime.now(norway_timezone)
-        time_difference = current_date - self.last_poo_time
-        total_seconds = time_difference.total_seconds()
-        hours = int(total_seconds // 3600)
-        minutes = int((total_seconds % 3600) // 60)
-        time_difference_formatted = f"{hours:02d}:{minutes:02d}"
-        return time_difference_formatted
+        return self._calculate_time_difference(self.last_poo_time)
 
     @property
     def df_last_day(self) -> pd.DataFrame:
-        last_day = self._df.iloc[-1]["Dato"]
+        last_day = self._get_last_day()
         return self._df[self._df["Dato"] == last_day]
 
     @property
@@ -103,40 +93,26 @@ class TotalStats:
 
     @property
     def ideal_now(self) -> int:
-        norway_timezone = ZoneInfo("Europe/Oslo")
-        # Get the time of the last entry
         last_entry_time = self.last_meal_time
-
-        # Calculate the start of the day for the last entry
         start_of_day = datetime.combine(
-            last_entry_time.date(), datetime.min.time(), tzinfo=norway_timezone
+            last_entry_time.date(), datetime.min.time(), tzinfo=ZoneInfo("Europe/Oslo")
         )
         end_of_day = datetime.combine(
-            last_entry_time.date(), datetime.max.time(), tzinfo=norway_timezone
+            last_entry_time.date(), datetime.max.time(), tzinfo=ZoneInfo("Europe/Oslo")
         )
-
-        # Calculate the fraction of the day that has passed up to the last entry
         fraction_of_day_passed = (last_entry_time - start_of_day) / (
             end_of_day - start_of_day
         )
-
-        # Calculate the ideal intake up to the time of the last entry
-        ideal_intake_now = self.largest_meal * fraction_of_day_passed
-
-        return int(ideal_intake_now)
+        return int(self.largest_meal * fraction_of_day_passed)
 
     @property
     def suggested_meal(self):
-        norway_timezone = ZoneInfo("Europe/Oslo")
-        current_date = datetime.now(norway_timezone)
-        time_difference = current_date - self.last_meal_time
-
+        time_difference = datetime.now(ZoneInfo("Europe/Oslo")) - self.last_meal_time
         return int(
             self.largest_meal * (time_difference.total_seconds() / (60 * 60 * 24))
         )
 
     def feeds_for_day(self, date):
-        # Format as dict of time: amount
         feeds = self._df[self._df["Dato"] == date].set_index("Tid")["Flaske"].to_dict()
         return feeds
 
@@ -156,31 +132,38 @@ app = Dash(
     title="Streaming Metrics",
     external_stylesheets=[
         dbc.themes.BOOTSTRAP,
-        "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200",  # Icons
-        "https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap",  # Font
+        "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200",
+        "https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap",
     ],
 )
 server = app.server
 
 
 def serve_layout():
-    # Fetch the data when layout is called
     df = pd.read_csv(URL)
     df.dropna(subset=["Tid", "Flaske"], inplace=True)
-
-    # Generate the dropdown options
     unique_dates = sort_dates(df["Dato"].unique())
     dropdown_options = [{"label": date, "value": date} for date in unique_dates]
     dropdown_value = unique_dates[-1] if unique_dates else None
 
-    # Store the DataFrame in dcc.Store for access by the callback
     return html.Div(
         [
             dcc.Store(id="store", data=df.to_dict("records")),
             dbc.Container(
                 dbc.Stack(
                     [
-                        html.H1("👩‍🍼 Aron tracker"),
+                        html.Div(
+                            [
+                                html.H1("👩‍🍼 Aron tracker", style={"flex": "1"}),
+                                daq.ToggleSwitch(
+                                    id="dark-mode-toggle",
+                                    label="Dark Mode",
+                                    value=False,
+                                    style={"marginBottom": "20px"},
+                                ),
+                            ],
+                            className="header-container",
+                        ),
                         dcc.Dropdown(
                             id="date-dropdown",
                             options=dropdown_options,
@@ -195,83 +178,48 @@ def serve_layout():
             ),
         ],
         id="page",
+        className="light-mode",
     )
 
 
 app.layout = serve_layout
 
 
-# Metric card callbacks
-@app.callback(
-    Output({"type": "metric-value", "index": "consumed-count"}, "children"),
-    Input("store", "data"),
+def create_metric_callback(output_index, data_func):
+    @app.callback(
+        Output({"type": "metric-value", "index": output_index}, "children"),
+        Input("store", "data"),
+    )
+    def callback(data):
+        total_stats = TotalStats(pd.DataFrame(data))
+        return data_func(total_stats)
+
+    return callback
+
+
+create_metric_callback(
+    "consumed-count", lambda ts: f"{ts.total_today} ({ts.ideal_now}) ml"
 )
-def consumed_count(data):
-    total_stats = TotalStats(pd.DataFrame(data))
-    return f"{total_stats.total_today} ({total_stats.ideal_now}) ml"
-
-
-@app.callback(
-    Output({"type": "metric-value", "index": "meals-count"}, "children"),
-    Input("store", "data"),
+create_metric_callback("meals-count", lambda ts: f"{ts.n_feeds_today} stk")
+create_metric_callback("largest-count", lambda ts: f"{ts.largest_meal} ml")
+create_metric_callback(
+    "last-meal",
+    lambda ts: f"{ts.last_meal_time.hour:02d}:{ts.last_meal_time.minute:02d}",
 )
-def meals_count(data):
-    total_stats = TotalStats(pd.DataFrame(data))
-    return f"{total_stats.n_feeds_today} stk"
-
-
-@app.callback(
-    Output({"type": "metric-value", "index": "largest-count"}, "children"),
-    Input("store", "data"),
+create_metric_callback(
+    "delta-last-meal",
+    lambda ts: f"{ts.time_since_last_feed.split(':')[0]}h {ts.time_since_last_feed.split(':')[1]}m",
 )
-def largest_meal(data):
-    total_stats = TotalStats(pd.DataFrame(data))
-    return f"{total_stats.largest_meal} ml"
-
-
-@app.callback(
-    Output({"type": "metric-value", "index": "last-meal"}, "children"),
-    Input("store", "data"),
+create_metric_callback(
+    "pee-poo", lambda ts: f"{ts.n_pee_today} 🟡 / {ts.n_poo_today} 🟤"
 )
-def last_meal_time(data):
-    total_stats = TotalStats(pd.DataFrame(data))
-    hh = f"{total_stats.last_meal_time.hour:02d}"
-    mm = f"{total_stats.last_meal_time.minute:02d}"
-    return f"{hh}:{mm}"
-
-
-@app.callback(
-    Output({"type": "metric-value", "index": "delta-last-meal"}, "children"),
-    Input("store", "data"),
+create_metric_callback("suggested-meal", lambda ts: f"{ts.suggested_meal} ml")
+create_metric_callback(
+    "delta-last-poo",
+    lambda ts: f"{ts.time_since_last_poo.split(':')[0]}h {ts.time_since_last_poo.split(':')[1]}m",
 )
-def delta_last_meal(data):
-    total_stats = TotalStats(pd.DataFrame(data))
-    h, m = total_stats.time_since_last_feed.split(":")
-    return f"{int(h)}h {int(m)}m"
 
 
-@app.callback(
-    Output({"type": "metric-value", "index": "pee-poo"}, "children"),
-    Input("store", "data"),
-)
-def pee_poo(data):
-    total_stats = TotalStats(pd.DataFrame(data))
-    return f"{total_stats.n_pee_today} 🟡 / {total_stats.n_poo_today} 🟤"
-
-
-@app.callback(
-    Output({"type": "metric-value", "index": "suggested-meal"}, "children"),
-    Input("store", "data"),
-)
-def suggested_meal(data):
-    total_stats = TotalStats(pd.DataFrame(data))
-    return f"{total_stats.suggested_meal} ml"
-
-
-@app.callback(
-    Output({"type": "metric-value", "index": "delta-last-poo"}, "children"),
-    Input("store", "data"),
-)
 def delta_last_poo(data):
     total_stats = TotalStats(pd.DataFrame(data))
     h, m = total_stats.time_since_last_poo.split(":")
@@ -286,62 +234,58 @@ def delta_last_poo(data):
 def render_graph(selected_date, data):
     df = pd.DataFrame(data)
     total_stats = TotalStats(df)
-
     filtered_df = df[df["Dato"] == selected_date].copy()
 
     filtered_df["Flaske"] = pd.to_numeric(filtered_df["Flaske"], errors="coerce")
     filtered_df["Dato"] = pd.to_datetime(filtered_df["Dato"], format="%d.%m.%Y")
     filtered_df["Cumulative_flaske"] = filtered_df.groupby("Dato")["Flaske"].cumsum()
-
     filtered_df["Tid"] = pd.to_datetime(filtered_df["Tid"], format="%H:%M")
 
-    # Create the graph for the selected date
     fig = px.bar(
         filtered_df,
         x="Tid",
         y="Flaske",
         text="Flaske",
-        color_discrete_sequence=["gray"],  # Set the bar color to gray
-        opacity=0.25,  # Set the opacity to 1.0 for fully opaque bars
+        color_discrete_sequence=["gray"],
+        opacity=0.25,
     )
     fig.update_traces(texttemplate="%{text}", textposition="outside")
 
-    # Add the cumulative line trace
-    fig.add_trace(
+    traces = [
         go.Scatter(
             x=filtered_df["Tid"],
             y=filtered_df["Cumulative_flaske"],
             mode="lines+markers",
             name="Kumulativ",
             line=dict(color="blue", width=3),
-        )
-    )
-
-    # Bæsj
-    avforing_df = filtered_df[filtered_df["Avføring"] == "A"]
-    fig.add_trace(
+        ),
         go.Scatter(
-            x=avforing_df["Tid"],
-            y=avforing_df["Cumulative_flaske"],
+            x=filtered_df[filtered_df["Avføring"] == "A"]["Tid"],
+            y=filtered_df[filtered_df["Avføring"] == "A"]["Cumulative_flaske"],
             mode="markers",
-            marker=dict(symbol="diamond", size=16, color="orange"),
             name="Bæsj",
-        )
-    )
-
-    # Tiss
-    urin_df = filtered_df[filtered_df["Urin"] == "U"]
-    fig.add_trace(
+            marker=dict(symbol="diamond", size=16, color="orange"),
+        ),
         go.Scatter(
-            x=urin_df["Tid"],
-            y=urin_df["Cumulative_flaske"],
+            x=filtered_df[filtered_df["Urin"] == "U"]["Tid"],
+            y=filtered_df[filtered_df["Urin"] == "U"]["Cumulative_flaske"],
             mode="markers",
-            marker=dict(symbol="star", size=12, color="palegoldenrod"),
             name="Tiss",
-        )
-    )
+            marker=dict(symbol="star", size=12, color="palegoldenrod"),
+        ),
+        go.Scatter(
+            x=["1900-01-01 00:00:00.0000", "1900-01-01 23:59:59.0000"],
+            y=[0, total_stats.largest_meal],
+            mode="lines",
+            name="Daily Goal",
+            opacity=0.25,
+            line=dict(color="gray", width=2, dash="dash"),
+        ),
+    ]
 
-    # Mål
+    for trace in traces:
+        fig.add_trace(trace)
+
     fig.add_hline(
         y=total_stats.largest_meal,
         line_color="red",
@@ -350,24 +294,7 @@ def render_graph(selected_date, data):
         annotation_position="bottom right",
     )
 
-    # Ideallinje
-    fig.add_trace(
-        go.Scatter(
-            x=["1900-01-01 00:00:00.0000", "1900-01-01 23:59:59.0000"],
-            y=[0, total_stats.largest_meal],
-            mode="lines",
-            name="Daily Goal",
-            opacity=0.25,
-            line=dict(color="gray", width=2, dash="dash"),
-        )
-    )
-
-    # Update layout for 'Tid' axis to treat as a datetime
-    fig.update_xaxes(
-        tickformat="%H:%M",  # Format the ticks as hours and minutes
-        tickmode="auto",  # Use automatic tick mode for datetime data
-    )
-
+    fig.update_xaxes(tickformat="%H:%M", tickmode="auto")
     fig.update_layout(xaxis_title="Tid", yaxis_title="ml", showlegend=False)
 
     return fig
@@ -378,49 +305,32 @@ def render_graph(selected_date, data):
     Input("store", "data"),
 )
 def summary(data):
-    # Convert the data to a DataFrame
     df = pd.DataFrame(data)
-    df["Dato"] = pd.to_datetime(
-        df["Dato"], dayfirst=True
-    )  # Ensure 'Dato' is a datetime object
-
-    # Group by 'Dato' and sum the 'Flaske' values for each date
+    df["Dato"] = pd.to_datetime(df["Dato"], dayfirst=True)
     daily_totals = df.groupby("Dato")["Flaske"].sum().reset_index()
     daily_totals["7_day_avg"] = (
         daily_totals["Flaske"].rolling(window=7, min_periods=1).mean()
     )
     daily_totals["Dato"] = daily_totals["Dato"].dt.strftime("%d-%m-%y")
 
-    # Exclude the last day from the 7-day average series
-    average_data = daily_totals[:-1]
-
-    # Create the bar chart from the daily totals
     fig = px.bar(
-        daily_totals,
-        x="Dato",
-        y="Flaske",
-        labels={"y": "Sum of Flaske", "x": "Date"},
+        daily_totals, x="Dato", y="Flaske", labels={"y": "Sum of Flaske", "x": "Date"}
     )
-
-    # Add the 7-day average line to the bar chart, excluding the last day
     fig.add_trace(
         go.Scatter(
-            x=average_data["Dato"],
-            y=average_data["7_day_avg"],
+            x=daily_totals[:-1]["Dato"],
+            y=daily_totals[:-1]["7_day_avg"],
             mode="lines",
             name="7 Day Average",
         )
     )
-
-    # Update the layout of the bar chart if necessary
     fig.update_layout(
         xaxis_title="Dato",
         yaxis_title="ml",
-        xaxis={"type": "category"},  # Treat 'Dato' as a categorical variable
-        yaxis={"type": "linear"},  # Ensure 'Flaske' is treated as a linear scale
+        xaxis={"type": "category"},
+        yaxis={"type": "linear"},
         showlegend=False,
     )
-
     return fig
 
 
@@ -430,19 +340,28 @@ def summary(data):
 )
 def last_day_table(selected_date, data):
     if selected_date is None or not data:
-        # If no date is selected or there is no data, return an empty list
-        return []
+        # Return empty data and columns if no date selected or no data
+        return [], []
 
-    # Convert the data to a DataFrame
+    # Convert data to DataFrame and filter for selected date
     df = pd.DataFrame(data)
-    # Filter the DataFrame for the selected date
-    filtered_df = df[df["Dato"] == selected_date]
-    filtered_df = filtered_df[["Tid", "Flaske", "Notat"]]
+    selected_columns = ["Tid", "Flaske", "Notat"]
+    filtered_df = df.loc[df["Dato"] == selected_date, selected_columns]
 
-    columns = [{"name": i, "id": i} for i in filtered_df.columns]
+    # Create column definitions for DataTable
+    columns = [{"name": col, "id": col} for col in selected_columns]
 
-    # Convert the filtered DataFrame to a dictionary for the DataTable
     return filtered_df.to_dict("records"), columns
+
+
+@app.callback(
+    Output("page", "className"),
+    Input("dark-mode-toggle", "value"),
+)
+def toggle_dark_mode(is_checked):
+    if is_checked:
+        return "dark-mode"
+    return "light-mode"
 
 
 if __name__ == "__main__":

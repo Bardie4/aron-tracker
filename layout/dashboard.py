@@ -4,7 +4,47 @@ from .MetricCard import MetricCard
 from .FigureCard import FigureCard
 from .DataCard import DataCard
 
+from dataclasses import dataclass
+
 lg, md, sm, width = 2, 2, 4, 6
+
+
+@dataclass
+class MetricCardConfig:
+    title: str
+    id: str
+
+
+@dataclass
+class FigureCardConfig:
+    title: str
+    id: str
+    description: str
+    lg_size: int
+
+
+metric_cards = [
+    MetricCardConfig("I dag/Ideal", "consumed-count"),
+    MetricCardConfig("Måltider i dag", "meals-count"),
+    MetricCardConfig("Største måltid", "largest-count"),
+    MetricCardConfig("Sist måltid", "last-meal"),
+    MetricCardConfig("Tid siden måltid", "delta-last-meal"),
+    MetricCardConfig("I bleien", "pee-poo"),
+    MetricCardConfig("Foreslått måltid", "suggested-meal"),
+    MetricCardConfig("Tid siden 🟤", "delta-last-poo"),
+]
+
+figure_cards = [
+    FigureCardConfig(
+        "Valgt dag", "today-graph", "Akkumulert konsummert morsmelkerstatning i dag.", 7
+    ),
+    FigureCardConfig(
+        "Historisk",
+        "history-graph",
+        "Summert konsummert morsmelkerstatning per dag.",
+        5,
+    ),
+]
 
 dashboard = dbc.Row(
     [
@@ -13,101 +53,32 @@ dashboard = dbc.Row(
                 dbc.Row(
                     [
                         dbc.Col(
-                            MetricCard("I dag/Ideal", id="consumed-count"),
+                            MetricCard(card.title, id=card.id),
                             lg=lg,
                             md=md,
                             sm=sm,
                             width=width,
-                        ),
-                        dbc.Col(
-                            MetricCard("Måltider i dag", id="meals-count"),
-                            lg=lg,
-                            md=md,
-                            sm=sm,
-                            width=width,
-                        ),
-                        dbc.Col(
-                            MetricCard("Største måltid", id="largest-count"),
-                            lg=lg,
-                            md=md,
-                            sm=sm,
-                            width=width,
-                        ),
-                        dbc.Col(
-                            MetricCard("Sist måltid", id="last-meal"),
-                            lg=lg,
-                            md=md,
-                            sm=sm,
-                            width=width,
-                        ),
-                        dbc.Col(
-                            MetricCard("Tid siden måltid", id="delta-last-meal"),
-                            lg=lg,
-                            md=md,
-                            sm=sm,
-                            width=width,
-                        ),
-                        dbc.Col(
-                            MetricCard("I bleien", id="pee-poo"),
-                            lg=lg,
-                            md=md,
-                            sm=sm,
-                            width=width,
-                        ),
-                        dbc.Col(
-                            MetricCard("Foreslått måltid", id="suggested-meal"),
-                            lg=lg,
-                            md=md,
-                            sm=sm,
-                            width=width,
-                        ),
-                        dbc.Col(
-                            MetricCard("Tid siden 🟤", id="delta-last-poo"),
-                            lg=lg,
-                            md=md,
-                            sm=sm,
-                            width=width,
-                        ),
+                        )
+                        for card in metric_cards
                     ]
                 ),
                 dbc.Row(
                     [
                         dbc.Col(
                             FigureCard(
-                                "Valgt dag",
-                                id="today-graph",
-                                description="Akkumulert konsummert morsmelkerstatning i dag.",
+                                card.title, id=card.id, description=card.description
                             ),
-                            lg=7,
+                            lg=card.lg_size,
                             md=12,
                             sm=12,
                             width=12,
-                        ),
-                        dbc.Col(
-                            FigureCard(
-                                "Historisk",
-                                id="history-graph",
-                                description="Summert konsummert morsmelkerstatning per dag.",
-                            ),
-                            lg=5,
-                            md=12,
-                            sm=12,
-                            width=12,
-                        ),
+                        )
+                        for card in figure_cards
                     ],
                     className="dashboard-row",
                 ),
-                dbc.Row(
-                    [
-                        dbc.Col(
-                            DataCard(
-                                "Data",
-                                id="selected-day-table",
-                            ),
-                        )
-                    ]
-                ),
-            ],
+                dbc.Row([dbc.Col(DataCard("Data", id="selected-day-table"))]),
+            ]
         )
     ],
     id="dashboard",
